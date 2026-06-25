@@ -11,6 +11,7 @@ import LessonPage from './components/LessonPage.tsx'
 import PlacementPage from './components/PlacementPage.tsx'
 import PlacementResults from './components/PlacementResults.tsx'
 import Sidebar from './components/Sidebar.tsx'
+import ServerOfflineModal from './components/ServerOfflineModal.tsx'
 
 function LandingShell() {
   const { theme, toggle: toggleTheme } = useTheme()
@@ -38,6 +39,7 @@ function DashboardShell() {
         theme={theme}
         onToggleTheme={toggleTheme}
       />
+      <ServerOfflineModal />
       <div className="flex" style={{ paddingTop: 'var(--chrome-h)', minHeight: 'calc(100vh - var(--chrome-h))' }}>
         <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
         <main className="flex-1 min-w-0 overflow-x-hidden">

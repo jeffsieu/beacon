@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import MarkdownRenderer from "./MarkdownRenderer";
+import TabbedCommandBlock from "./TabbedCommandBlock";
+import type { Harness } from "../types";
 import {
   BrainCircuit,
   MessageSquare,
@@ -10,35 +12,6 @@ import {
   GitBranch,
   Sparkles,
 } from "lucide-react";
-
-type AgentTab = "claude" | "agents";
-
-function AgentTabs({ tab, setTab }: { tab: AgentTab; setTab: (t: AgentTab) => void }) {
-  return (
-    <div className="flex items-center gap-0.5 mt-2 mb-0.5">
-      <button
-        onClick={() => setTab("claude")}
-        className="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
-        style={{
-          background: tab === "claude" ? "var(--c-accent)" : "var(--c-surface-2)",
-          color: tab === "claude" ? "#221E17" : "var(--c-muted)",
-        }}
-      >
-        Claude Code
-      </button>
-      <button
-        onClick={() => setTab("agents")}
-        className="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
-        style={{
-          background: tab === "agents" ? "var(--c-accent)" : "var(--c-surface-2)",
-          color: tab === "agents" ? "#221E17" : "var(--c-muted)",
-        }}
-      >
-        Other agents
-      </button>
-    </div>
-  );
-}
 
 const features = [
   {
@@ -80,10 +53,9 @@ const features = [
 ];
 
 export default function LandingPage() {
-  const [tab, setTab] = useState<AgentTab>("claude");
   const origin = window.location.origin;
+  const [harness, setHarness] = useState<Harness>("global");
 
-  const claude = tab === "claude";
   return (
     <div style={{ fontFamily: "var(--font-family-ui)" }}>
       {/* Hero */}
@@ -168,52 +140,70 @@ export default function LandingPage() {
                     className="text-xs mt-1 block"
                     style={{ color: "var(--c-muted)" }}
                   >
-                    This installs Beacon into <code>.agents/skills/beacon/</code>.
-                  </span>
-                  <span
-                    className="text-xs mt-1 block"
-                    style={{ color: "var(--c-muted)" }}
-                  >
-                    Then install CLI dependencies:{" "}
-                  <AgentTabs tab={tab} setTab={setTab} />
-                  {claude ? (
-                    <MarkdownRenderer content={"```bash\n(cd .claude/skills/beacon && npm install)\n```"} />
-                  ) : (
-                    <MarkdownRenderer content={"```bash\n(cd .agents/skills/beacon && npm install)\n```"} />
-                  )}
+                    Then install CLI dependencies:
+                  <TabbedCommandBlock
+                    label="With:"
+                    commands={{
+                      claude: "(cd .claude/skills/beacon && npm install)",
+                      agents: "(cd .agents/skills/beacon && npm install)",
+                    }}
+                  />
                   </span>
                 </>
               }
             />
+
             <Step
               num={3}
+              title="Optional: Make beacon available globally"
+              desc={
+                <>
+                  <p className="mb-2">
+                    Link the CLI so <code>beacon</code> works from anywhere on
+                    your machine — no more long paths.
+                  </p>
+                  <MarkdownRenderer content={"```bash\n(cd .agents/skills/beacon && npm link)\n```"} />
+                </>
+              }
+            />
+
+            <Step
+              num={4}
               title="Add a course"
               desc={
                 <>
                   Either create your own curriculum with your agent:
                   <MarkdownRenderer content={"```bash\n/beacon create-course\n```"} />
                   Or pull a published course from GitHub:
-                  <AgentTabs tab={tab} setTab={setTab} />
-                  {claude ? (
-                    <MarkdownRenderer content={"```bash\nnpx tsx .claude/skills/beacon/beacon.ts courses add username/repo course-name\n```"} />
-                  ) : (
-                    <MarkdownRenderer content={"```bash\nnpx tsx .agents/skills/beacon/beacon.ts courses add username/repo course-name\n```"} />
-                  )}
+                  <TabbedCommandBlock
+                    label="With:"
+                    active={harness}
+                    onChange={setHarness}
+                    commands={{
+                      global: "beacon courses add username/repo course-name",
+                      claude: "npx tsx .claude/skills/beacon/beacon.ts courses add username/repo course-name",
+                      agents: "npx tsx .agents/skills/beacon/beacon.ts courses add username/repo course-name",
+                    }}
+                  />
                 </>
               }
             />
             <Step
-              num={4}
+              num={5}
               title="Start the Beacon server"
               desc={
                 <>
                   Start the relay server so the viewer can connect:
-                  <AgentTabs tab={tab} setTab={setTab} />
-                  {claude ? (
-                    <MarkdownRenderer content={`\`\`\`bash\nnpx tsx .claude/skills/beacon/beacon.ts serve --cors-origin ${origin}\n\`\`\``} />
-                  ) : (
-                    <MarkdownRenderer content={`\`\`\`bash\nnpx tsx .agents/skills/beacon/beacon.ts serve --cors-origin ${origin}\n\`\`\``} />
-                  )}
+                  <TabbedCommandBlock
+                    label="With:"
+                    active={harness}
+                    onChange={setHarness}
+                    commands={{
+                      global: `beacon serve --cors-origin ${origin}`,
+                      claude: `npx tsx .claude/skills/beacon/beacon.ts serve --cors-origin ${origin}`,
+                      agents: `npx tsx .agents/skills/beacon/beacon.ts serve --cors-origin ${origin}`,
+                    }}
+                  />
                   <span
                     className="text-xs mt-1 block"
                     style={{ color: "var(--c-muted)" }}
@@ -225,7 +215,7 @@ export default function LandingPage() {
               }
             />
             <Step
-              num={5}
+              num={6}
               title="Run /beacon with your agent"
               desc={
                 <>
@@ -237,7 +227,7 @@ export default function LandingPage() {
               }
             />
             <Step
-              num={6}
+              num={7}
               title="Go to dashboard"
               desc={
                 <>

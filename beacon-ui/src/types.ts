@@ -179,6 +179,14 @@ export interface PlacementProposed {
   bonuses: string[];
 }
 
+export type Harness = "global" | "claude" | "agents";
+
+export const HARNESS_LABELS: Record<Harness, string> = {
+  global: "Aliased",
+  claude: ".claude/skills",
+  agents: ".agents/skills",
+};
+
 export type ServerStatus = "connected" | "disconnected" | "unknown";
 
 export interface SessionState {
