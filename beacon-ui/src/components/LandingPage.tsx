@@ -81,6 +81,7 @@ const features = [
 
 export default function LandingPage() {
   const [tab, setTab] = useState<AgentTab>("claude");
+  const origin = window.location.origin;
 
   const claude = tab === "claude";
   return (
@@ -209,9 +210,9 @@ export default function LandingPage() {
                   Start the relay server so the viewer can connect:
                   <AgentTabs tab={tab} setTab={setTab} />
                   {claude ? (
-                    <MarkdownRenderer content={"```bash\nnpx tsx .claude/skills/beacon/beacon.ts serve\n```"} />
+                    <MarkdownRenderer content={`\`\`\`bash\nnpx tsx .claude/skills/beacon/beacon.ts serve --cors-origin ${origin}\n\`\`\``} />
                   ) : (
-                    <MarkdownRenderer content={"```bash\nnpx tsx .agents/skills/beacon/beacon.ts serve\n```"} />
+                    <MarkdownRenderer content={`\`\`\`bash\nnpx tsx .agents/skills/beacon/beacon.ts serve --cors-origin ${origin}\n\`\`\``} />
                   )}
                   <span
                     className="text-xs mt-1 block"

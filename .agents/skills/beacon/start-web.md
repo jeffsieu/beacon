@@ -7,10 +7,10 @@ Browser-based learning via the Beacon viewer. The user picks a course in the bro
 Start the relay server (the dashboard is hosted at `https://beacon.jeffsieu.com`):
 
 ```bash
-beacon serve
+beacon serve --cors-origin https://beacon.jeffsieu.com
 ```
 
-No local beacon-ui needed — open `https://beacon.jeffsieu.com` in a browser. If running locally, use `http://localhost:5173` instead.
+If running the dashboard locally, use `--cors-origin http://localhost:5173` instead.
 
 ---
 
