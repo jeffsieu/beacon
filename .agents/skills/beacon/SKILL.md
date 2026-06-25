@@ -4,7 +4,9 @@ description: "AI-guided learning companion. Provides the CLI reference, grading 
 ---
 
 > **CLI alias**: Throughout this skill, `beacon` means the beacon CLI script (`beacon.ts`) invoked via `npx tsx`.
+> **CLI location**: The CLI lives in the skill directory — either `.agents/skills/beacon/beacon.ts` or `.claude/skills/beacon/beacon.ts`. Always resolve the path relative to the repo root before running commands. If the CLI fails with a module-not-found error, run `npm install` inside the skill directory first.
 > **Working directory**: All work happens at the repo root.
+> **Dashboard**: The web dashboard is hosted at `https://beacon.jeffsieu.com`. There is no need to run a local beacon-ui — just start the relay server (`beacon serve`) and open the hosted dashboard.
 
 ## Bare invocation (`/beacon`)
 

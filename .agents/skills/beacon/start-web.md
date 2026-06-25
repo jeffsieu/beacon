@@ -4,12 +4,13 @@ Browser-based learning via the Beacon viewer. The user picks a course in the bro
 
 ## Startup
 
-Two services (separate terminals or background):
+Start the relay server (the dashboard is hosted at `https://beacon.jeffsieu.com`):
 
 ```bash
-beacon serve                        # Relay server (HTTP + SSE, port 4646)
-cd ./beacon-ui && npm run dev       # Viewer (Vite, port 5173)
+beacon serve
 ```
+
+No local beacon-ui needed — open `https://beacon.jeffsieu.com` in a browser. If running locally, use `http://localhost:5173` instead.
 
 ---
 
