@@ -1,0 +1,14 @@
+# Runtime state
+.beacon/
+
+# Tooling
+.opencode/
+.pi/
+node_modules/
+
+# Mac
+.DS_Store
+
+# Legacy (deprecated paths)
+.progress/
+*/lessons/

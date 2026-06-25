@@ -1,0 +1,24 @@
+{
+  "name": "beacon",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Beacon CLI — AI-guided learning companion",
+  "dependencies": {
+    "@hono/node-server": "1.19.7",
+    "@optique/core": "1.1.0",
+    "@optique/discover": "1.1.0",
+    "@optique/run": "1.1.0",
+    "hono": "4.12.27",
+    "js-yaml": "5.1.0",
+    "tsx": "4.22.4"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "26.0.1",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
