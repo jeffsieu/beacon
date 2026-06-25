@@ -6,6 +6,7 @@
   "description": "Beacon CLI — AI-guided learning companion",
   "dependencies": {
     "@hono/node-server": "1.19.7",
+    "@inquirer/prompts": "^8.5.2",
     "@optique/core": "1.1.0",
     "@optique/discover": "1.1.0",
     "@optique/run": "1.1.0",

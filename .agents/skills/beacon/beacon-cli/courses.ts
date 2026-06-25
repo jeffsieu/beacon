@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { confirm } from "@inquirer/prompts";
 import { object, or } from "@optique/core/constructs";
 import { optional } from "@optique/core/modifiers";
 import { argument, constant, option } from "@optique/core/primitives";
@@ -49,17 +50,34 @@ function writeCourseFromRemote(
   return written;
 }
 
-// ── beacon courses add ─────────────────────────────────────────────────────────
+// ── beacon courses install ────────────────────────────────────────────────────
 
-const coursesAdd = defineCommand({
-  path: ["courses", "add"],
+const coursesInstall = defineCommand({
+  path: ["courses", "install"],
   parser: object({
-    source: argument(string({ metavar: "SOURCE" })),
+    source: optional(argument(string({ metavar: "SOURCE" }))),
     course: optional(argument(string({ metavar: "COURSE" }))),
     alias: optional(argument(string({ metavar: "ALIAS" }))),
   }),
-  metadata: { brief: message`Add a course from a GitHub repo or URL.` },
+  metadata: { brief: message`Install courses from a GitHub repo or from the lock file.` },
   async handler({ source, course, alias }) {
+    // No source → install all from lock
+    if (!source) {
+      const lock = u.readLock();
+      const entries = Object.entries(lock);
+      if (entries.length === 0) {
+        console.log("no courses in lock — nothing to install");
+        process.exit(0);
+      }
+      for (const [id, entry] of entries) {
+        const { remote, sourcePath } = entry as any;
+        const [username, localName] = id.split("/");
+        await installCourse({ url: remote, username, sourcePath, localName });
+      }
+      return;
+    }
+
+    // Source given → discover and install from remote
     const userRepo = source;
     if (!userRepo) {
       u.die(
@@ -83,87 +101,146 @@ const coursesAdd = defineCommand({
 
     const [username, repoName] = normalized.split("/");
     const url = `https://github.com/${username}/${repoName}`;
-    const remoteName = username;
 
-    const remotes = u.getRemotes();
-    if (remotes[remoteName]) {
-      if (remotes[remoteName] !== url) {
-        u.die(
-          `remote "${remoteName}" already exists with a different URL: ${remotes[remoteName]}\nRemove it first: git remote remove ${remoteName}`,
-        );
-      }
-      console.log(`remote "${remoteName}" already exists — skipping add`);
-    } else {
-      u.run(`git remote add ${remoteName} ${url}`, { cwd: u.getRepoRoot() });
-      console.log(`added remote "${remoteName}" → ${url}`);
+    const targetDir = path.join(u.getRepoRoot(), "courses", username);
+
+    // Clone to temp first to discover available courses and verify
+    const tmpDir = path.join(os.tmpdir(), `beacon-discover-${Date.now()}`);
+    let branch = "main";
+    for (const b of ["main", "master"]) {
+      const r = u.runSilent(`git clone --depth 1 --single-branch --branch ${b} ${url} ${tmpDir}`);
+      if (r.code === 0) { branch = b; break; }
+    }
+    if (!fs.existsSync(tmpDir)) {
+      u.die(`failed to clone ${url}`);
     }
 
-    console.log(`fetching ${remoteName}...`);
-    try {
-      u.run(`git fetch ${remoteName}`, {
-        cwd: u.getRepoRoot(),
-        stdio: "inherit",
-      });
-    } catch (err: unknown) {
-      const e = err as Error;
-      u.die(
-        `git fetch failed: ${e.message.split("\n")[0]}\nCheck the URL or your network connection`,
-      );
-    }
-
-    const branch = u.detectDefaultBranch(remoteName);
+    // Detect actual branch from clone
+    branch = detectBranch(tmpDir) || "main";
 
     let coursesToAdd;
     if (course) {
+      const sourcePath = path.join(tmpDir, course);
+      if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isDirectory()) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        u.die(`course "${course}" not found in ${username}/${repoName}`);
+      }
       coursesToAdd = [{ sourcePath: course, localName: alias || course }];
     } else {
-      const dirs = u.listRemoteTopDirs(remoteName, branch);
+      const dirs = fs.readdirSync(tmpDir, { withFileTypes: true })
+        .filter(d => d.isDirectory() && !d.name.startsWith("."))
+        .filter(d => {
+          try {
+            return fs.readdirSync(path.join(tmpDir, d.name)).some(f => f.endsWith(".md"));
+          } catch { return false; }
+        })
+        .map(d => d.name);
+
       if (dirs.length === 0) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
         u.die(
-          `no root-level directories with .md files found in ${remoteName}/${branch}\nThe remote repo may have a different structure`,
+          `no directories with .md files found in ${username}/${repoName}`,
         );
       }
       const selected = await u.pickCourses(`${username}/${repoName}`, dirs);
       if (selected.length === 0) {
         console.log("cancelled");
+        fs.rmSync(tmpDir, { recursive: true, force: true });
         process.exit(0);
       }
       coursesToAdd = selected.map((d) => ({ sourcePath: d, localName: d }));
     }
 
-    const lock = u.readLock();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
 
     for (const { sourcePath, localName } of coursesToAdd) {
-      const courseId = `${username}/${localName}`;
-      console.log(`\nadding course: ${sourcePath} → ${courseId}`);
-      const written = writeCourseFromRemote(
-        remoteName,
-        branch,
-        sourcePath,
-        courseId,
-      );
-      if (written === 0) {
-        process.stderr.write(
-          `WARN: no files written for course "${sourcePath}"\n`,
-        );
-        continue;
-      }
-      const sha = u.revParse(`${remoteName}/${branch}`);
-      lock[courseId] = {
-        remote: url,
-        remoteName,
-        branch,
-        sourcePath,
-        commitSha: sha,
-      };
-      u.writeLock(lock);
-      const { added, removed } = lib.reconcileKnowledge(courseId);
-      console.log(
-        `  wrote ${written} file(s), KNOWLEDGE.md: +${added} added, -${removed} removed`,
-      );
+      await installCourse({ url, username, sourcePath, localName, branch });
     }
   },
 });
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+
+function courseDirForLock(courseId: string): string {
+  return path.join(u.getRepoRoot(), "courses", courseId);
+}
+
+// ── installCourse helper ────────────────────────────────────────────────────────
+
+async function installCourse({
+  url,
+  username,
+  sourcePath,
+  localName,
+  branch = "main",
+}: {
+  url: string;
+  username: string;
+  sourcePath: string;
+  localName: string;
+  branch?: string;
+}) {
+  const courseId = `${username}/${localName}`;
+  const courseDir = path.join(
+    u.getRepoRoot(),
+    "courses",
+    username,
+    localName,
+  );
+
+  // Handle existing
+  if (fs.existsSync(courseDir)) {
+    const overwrite = await confirm({
+      message: `Course "${courseId}" already exists. Update it?`,
+      default: false,
+    });
+    if (!overwrite) {
+      console.log(`  skipped — ${courseId} already installed`);
+      return;
+    }
+    fs.rmSync(courseDir, { recursive: true, force: true });
+  }
+
+  fs.mkdirSync(path.dirname(courseDir), { recursive: true });
+  console.log(`installing ${courseId}...`);
+
+  // Clone with sparse checkout
+  const cloneResult = u.runSilent(
+    `git clone --depth 1 --filter=blob:none --sparse ${url} ${courseDir}`,
+  );
+  if (cloneResult.code !== 0) {
+    u.die(`git clone failed for ${courseId}`);
+  }
+  u.runSilent(`git sparse-checkout set ${sourcePath}`, { cwd: courseDir });
+
+  // Move files up from nested sourcePath dir
+  const nestedDir = path.join(courseDir, sourcePath);
+  if (fs.existsSync(nestedDir) && fs.statSync(nestedDir).isDirectory()) {
+    for (const f of fs.readdirSync(nestedDir)) {
+      fs.renameSync(path.join(nestedDir, f), path.join(courseDir, f));
+    }
+    fs.rmdirSync(nestedDir);
+  }
+
+  // Update lock with commit SHA
+  const sha = u.revParseDir(courseDir, "HEAD");
+  // Read canonical id from course.json
+  const courseJsonPath = path.join(courseDir, "course.json");
+  let canonicalId = courseId;
+  if (fs.existsSync(courseJsonPath)) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(courseJsonPath, "utf8"));
+      if (meta.id) canonicalId = meta.id;
+    } catch {}
+  }
+
+  const lock = u.readLock();
+  lock[canonicalId] = { remote: url, branch, sourcePath, commitSha: sha };
+  u.writeLock(lock);
+
+  const { added, removed } = lib.reconcileKnowledge(canonicalId);
+  console.log(`  installed — KNOWLEDGE.md: +${added}/-${removed}`);
+}
 
 // ── beacon courses update ──────────────────────────────────────────────────────
 
@@ -203,26 +280,30 @@ const coursesUpdate = defineCommand({
     let anyConflict = false;
 
     for (const courseId of courses) {
-      const { remoteName, branch, sourcePath, commitSha } =
-        lock[courseId] as any;
-      console.log(`\nupdating ${courseId} from ${remoteName}/${branch}...`);
-
-      try {
-        u.run(`git fetch ${remoteName}`, {
-          cwd: u.getRepoRoot(),
-          stdio: "inherit",
-        });
-      } catch {
+      const { branch, commitSha } = lock[courseId] as any;
+      const courseDir = courseDirForLock(courseId);
+      if (!courseDir || !fs.existsSync(path.join(courseDir, ".git"))) {
         process.stderr.write(
-          `WARN: git fetch ${remoteName} failed — skipping ${courseId}\n`,
+          `WARN: ${courseId} has no local git — skipping\n`,
         );
         continue;
       }
 
-      const newSha = u.revParse(`${remoteName}/${branch}`);
+      console.log(`\nupdating ${courseId}...`);
+
+      // Fetch from origin
+      const fetchResult = u.runSilent(`git fetch origin`, { cwd: courseDir });
+      if (fetchResult.code !== 0) {
+        process.stderr.write(
+          `WARN: git fetch failed for ${courseId}\n`,
+        );
+        continue;
+      }
+
+      const newSha = u.revParseDir(courseDir, `origin/${branch}`);
       if (!newSha) {
         process.stderr.write(
-          `WARN: could not resolve ${remoteName}/${branch} — skipping\n`,
+          `WARN: could not resolve origin/${branch} for ${courseId}\n`,
         );
         continue;
       }
@@ -231,90 +312,35 @@ const coursesUpdate = defineCommand({
         continue;
       }
 
-      const remoteFiles = u.listRemotePaths(remoteName, branch, sourcePath);
-      if (remoteFiles.length === 0) {
-        process.stderr.write(
-          `WARN: no files found at ${remoteName}/${branch}:${sourcePath}\n`,
-        );
-        continue;
-      }
-
-      const conflictFiles = [];
-      let written = 0,
-        skipped = 0;
-
-      for (const remotePath of remoteFiles) {
-        const relative = remotePath.slice(sourcePath.length + 1);
-        const localPath = path.join(
-          u.getRepoRoot(),
-          "courses",
-          courseId,
-          relative,
-        );
-        const theirs = u.gitShow(`${remoteName}/${branch}`, remotePath);
-        if (theirs === null) continue;
-
-        const base = u.gitShow(commitSha, remotePath);
-        const ours = fs.existsSync(localPath)
-          ? fs.readFileSync(localPath, "utf8")
-          : null;
-
-        if (base === null || ours === null) {
-          fs.mkdirSync(path.dirname(localPath), { recursive: true });
-          fs.writeFileSync(localPath, theirs, "utf8");
-          written++;
-          continue;
-        }
-        if (base === theirs) {
-          skipped++;
-          continue;
-        }
-        if (base === ours) {
-          fs.writeFileSync(localPath, theirs, "utf8");
-          written++;
-          continue;
-        }
-
-        const tmpBase = path.join(
-          os.tmpdir(),
-          `beacon-base-${Date.now()}-${path.basename(relative)}`,
-        );
-        const tmpTheirs = path.join(
-          os.tmpdir(),
-          `beacon-theirs-${Date.now()}-${path.basename(relative)}`,
-        );
-        fs.writeFileSync(tmpBase, base, "utf8");
-        fs.writeFileSync(tmpTheirs, theirs, "utf8");
-
-        const mergeResult = spawnSync(
-          "git",
-          ["merge-file", localPath, tmpBase, tmpTheirs],
-          { cwd: u.getRepoRoot(), encoding: "utf8" },
-        );
-        fs.unlinkSync(tmpBase);
-        fs.unlinkSync(tmpTheirs);
-
-        if (mergeResult.status === 0) {
-          written++;
-        } else {
-          conflictFiles.push(relative);
-        }
-      }
-
-      if (conflictFiles.length > 0) {
-        anyConflict = true;
-        console.log(`  ${courseId}: CONFLICTS in:`);
-        conflictFiles.forEach((f) => console.log(`    ${f}`));
-        console.log(
-          `  Resolve conflicts, then re-run: beacon courses update ${courseId}`,
-        );
-      } else {
+      // Try fast-forward merge
+      const mergeResult = u.runSilent(
+        `git merge --ff-only origin/${branch}`,
+        { cwd: courseDir },
+      );
+      if (mergeResult.code === 0) {
         lock[courseId].commitSha = newSha;
         u.writeLock(lock);
         const { added, removed } = lib.reconcileKnowledge(courseId);
         console.log(
-          `  ${courseId}: updated — ${written} file(s) written, ${skipped} unchanged, KNOWLEDGE.md: +${added}/-${removed}`,
+          `  ${courseId}: updated — KNOWLEDGE.md: +${added}/-${removed}`,
         );
+      } else {
+        // Attempt merge, may produce conflicts
+        const mergeResult2 = u.runSilent(
+          `git merge origin/${branch}`,
+          { cwd: courseDir },
+        );
+        if (mergeResult2.code === 0) {
+          lock[courseId].commitSha = newSha;
+          u.writeLock(lock);
+          const { added, removed } = lib.reconcileKnowledge(courseId);
+          console.log(
+            `  ${courseId}: merged — KNOWLEDGE.md: +${added}/-${removed}`,
+          );
+        } else {
+          anyConflict = true;
+          console.log(`  ${courseId}: CONFLICTS — resolve in ${courseDir}, then run:\n    git -C ${courseDir} add . && git -C ${courseDir} merge --continue\n  then update KNOWLEDGE.md manually`);
+        }
       }
     }
 
@@ -428,7 +454,7 @@ const coursesCheck = defineCommand({
 });
 
 export const courseCommands = [
-  coursesAdd,
+  coursesInstall,
   coursesUpdate,
   coursesRemove,
   coursesList,

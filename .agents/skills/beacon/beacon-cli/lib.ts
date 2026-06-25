@@ -444,6 +444,12 @@ export function courseDirById(courseId: string): string | null {
   const root = repoRoot();
   const coursesDir = path.join(root, "courses");
 
+  // Direct path match: courses/<user>/<course>/
+  const directPath = path.join(coursesDir, courseId);
+  if (fs.existsSync(path.join(directPath, "course.json"))) {
+    return directPath;
+  }
+
   function search(dir: string): string | null {
     const courseJsonPath = path.join(dir, "course.json");
     if (fs.existsSync(courseJsonPath)) {

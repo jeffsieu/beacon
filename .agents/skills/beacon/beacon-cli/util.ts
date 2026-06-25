@@ -1,7 +1,6 @@
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import readline from "node:readline";
 
 // ── repo root ──────────────────────────────────────────────────────────────────
 
@@ -17,6 +16,18 @@ try {
 
 export function getRepoRoot(): string {
   return repoRoot;
+}
+
+export function isGitRepo(): boolean {
+  try {
+    execSync("git rev-parse --git-dir", {
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── lock file ──────────────────────────────────────────────────────────────────
@@ -96,6 +107,12 @@ export function gitShow(ref: string, filePath: string): string | null {
   return r.stdout;
 }
 
+export function revParseDir(dir: string, ref: string): string | null {
+  const r = runSilent(`git rev-parse "${ref}"`, { cwd: dir });
+  if (r.code !== 0) return null;
+  return r.stdout.trim();
+}
+
 export function revParse(ref: string): string | null {
   const r = runSilent(`git rev-parse "${ref}"`);
   if (r.code !== 0) return null;
@@ -130,42 +147,22 @@ export function listRemoteTopDirs(
 
 // ── interactive picker ─────────────────────────────────────────────────────────
 
+import { checkbox, confirm } from "@inquirer/prompts";
+
 export async function pickCourses(
   remoteName: string,
   dirs: string[],
 ): Promise<string[]> {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    console.log(`\nAvailable courses in ${remoteName}:`);
-    dirs.forEach((d, i) => console.log(`  ${i + 1}. ${d}`));
-    rl.question(
-      '\nEnter numbers (e.g. 1,3), "all", or Enter to cancel:\n> ',
-      (answer) => {
-        rl.close();
-        if (!answer.trim()) {
-          resolve([]);
-          return;
-        }
-        if (answer.trim().toLowerCase() === "all") {
-          resolve(dirs);
-          return;
-        }
-        const indices = answer
-          .split(",")
-          .map((s) => parseInt(s.trim(), 10) - 1);
-        const selected = indices
-          .filter((i) => i >= 0 && i < dirs.length)
-          .map((i) => dirs[i]);
-        if (selected.length === 0) {
-          console.log("No valid selection — cancelled.");
-          resolve([]);
-        } else resolve(selected);
-      },
-    );
+  const selected = await checkbox({
+    message: `Select courses from ${remoteName}:`,
+    choices: dirs.map((d) => ({ name: d, value: d })),
+    instructions: "(space to select, enter to confirm)",
   });
+  if (selected.length === 0) {
+    console.log("cancelled");
+    return [];
+  }
+  return selected;
 }
 
 // ── error ──────────────────────────────────────────────────────────────────────
