@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router";
 import { useCourseProgress } from "../hooks/useCourseProgress";
 import { useCourses } from "../hooks/useCourses";
@@ -109,10 +109,15 @@ const course = decodeCourseId(encodedCourse!);
     });
   }, [subscribe, queryClient, course]);
 
-  // Auto-request suggestions when cache is empty
+  const hasAutoRequested = useRef(false);
+
+  // Auto-request suggestions when cache is empty (once per mount)
   useEffect(() => {
     if (!session?.sessionId || !suggestionsData || learnMutation.isPending) return;
-    if (!suggestionsData.suggestions?.length) learnMutation.mutate("");
+    if (!suggestionsData.suggestions?.length && !hasAutoRequested.current) {
+      hasAutoRequested.current = true;
+      learnMutation.mutate("");
+    }
   }, [session?.sessionId, suggestionsData, course, learnMutation.isPending]);
 
   const { stats, chapters } = progress || {

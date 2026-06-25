@@ -300,6 +300,37 @@ function mountRoutes(
         sessionId,
         receivedAt: new Date().toISOString(),
       }) + "\n";
+
+    // Dedup: remove unacked old lesson:suggestion, keep latest
+    if (msg.type === "lesson:suggestion") {
+      if (fs.existsSync(INBOX_PATH)) {
+        const lines = fs.readFileSync(INBOX_PATH, "utf8").split("\n");
+        const ackedIds = new Set<string>();
+        for (const l of lines) {
+          try {
+            const m = JSON.parse(l);
+            if (m.type === "message:ack" && m.replyTo) ackedIds.add(m.replyTo);
+          } catch {}
+        }
+        const filtered = lines.filter((l) => {
+          try {
+            const m = JSON.parse(l);
+            if (
+              m.type === "lesson:suggestion" &&
+              m.sessionId === sessionId &&
+              !ackedIds.has(m.messageId)
+            ) {
+              return false; // remove — unacked, about to be replaced
+            }
+            return true;
+          } catch {
+            return true;
+          }
+        });
+        fs.writeFileSync(INBOX_PATH, filtered.join("\n") + (filtered.length ? "\n" : ""));
+      }
+    }
+
     fs.appendFileSync(INBOX_PATH, line);
 
     const chatPath = path.join(STATE_DIR, "sessions", sessionId, "chat.jsonl");
