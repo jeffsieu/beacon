@@ -43,6 +43,8 @@ function CodeBlock({ language, children }: { language: string; children: string 
             fontFamily: 'var(--font-family-mono)',
             fontSize: '0.8rem',
             lineHeight: 1.5,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
           },
         }}
         customStyle={{

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import MarkdownRenderer from "./MarkdownRenderer";
@@ -9,6 +10,35 @@ import {
   GitBranch,
   Sparkles,
 } from "lucide-react";
+
+type AgentTab = "claude" | "agents";
+
+function AgentTabs({ tab, setTab }: { tab: AgentTab; setTab: (t: AgentTab) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 mt-2 mb-0.5">
+      <button
+        onClick={() => setTab("claude")}
+        className="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+        style={{
+          background: tab === "claude" ? "var(--c-accent)" : "var(--c-surface-2)",
+          color: tab === "claude" ? "#221E17" : "var(--c-muted)",
+        }}
+      >
+        Claude Code
+      </button>
+      <button
+        onClick={() => setTab("agents")}
+        className="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+        style={{
+          background: tab === "agents" ? "var(--c-accent)" : "var(--c-surface-2)",
+          color: tab === "agents" ? "#221E17" : "var(--c-muted)",
+        }}
+      >
+        Other agents
+      </button>
+    </div>
+  );
+}
 
 const features = [
   {
@@ -50,6 +80,9 @@ const features = [
 ];
 
 export default function LandingPage() {
+  const [tab, setTab] = useState<AgentTab>("claude");
+
+  const claude = tab === "claude";
   return (
     <div style={{ fontFamily: "var(--font-family-ui)" }}>
       {/* Hero */}
@@ -136,6 +169,18 @@ export default function LandingPage() {
                   >
                     This installs Beacon into <code>.agents/skills/beacon/</code>.
                   </span>
+                  <span
+                    className="text-xs mt-1 block"
+                    style={{ color: "var(--c-muted)" }}
+                  >
+                    Then install CLI dependencies:{" "}
+                  <AgentTabs tab={tab} setTab={setTab} />
+                  {claude ? (
+                    <MarkdownRenderer content={"```bash\n(cd .claude/skills/beacon && npm install)\n```"} />
+                  ) : (
+                    <MarkdownRenderer content={"```bash\n(cd .agents/skills/beacon && npm install)\n```"} />
+                  )}
+                  </span>
                 </>
               }
             />
@@ -147,14 +192,12 @@ export default function LandingPage() {
                   Either create your own curriculum with your agent:
                   <MarkdownRenderer content={"```bash\n/beacon create-course\n```"} />
                   Or pull a published course from GitHub:
-                  <MarkdownRenderer content={`\`\`\`bash
-# Claude Code
-npx tsx .claude/skills/beacon/beacon.ts courses add username/repo course-name
-\`\`\``} />
-                  <MarkdownRenderer content={`\`\`\`bash
-# Other agents (pi, Cursor, etc.)
-npx tsx .agents/skills/beacon/beacon.ts courses add username/repo course-name
-\`\`\``} />
+                  <AgentTabs tab={tab} setTab={setTab} />
+                  {claude ? (
+                    <MarkdownRenderer content={"```bash\nnpx tsx .claude/skills/beacon/beacon.ts courses add username/repo course-name\n```"} />
+                  ) : (
+                    <MarkdownRenderer content={"```bash\nnpx tsx .agents/skills/beacon/beacon.ts courses add username/repo course-name\n```"} />
+                  )}
                 </>
               }
             />
@@ -164,14 +207,12 @@ npx tsx .agents/skills/beacon/beacon.ts courses add username/repo course-name
               desc={
                 <>
                   Start the relay server so the viewer can connect:
-                  <MarkdownRenderer content={`\`\`\`bash
-# Claude Code
-npx tsx .claude/skills/beacon/beacon.ts serve
-\`\`\``} />
-                  <MarkdownRenderer content={`\`\`\`bash
-# Other agents (pi, Cursor, etc.)
-npx tsx .agents/skills/beacon/beacon.ts serve
-\`\`\``} />
+                  <AgentTabs tab={tab} setTab={setTab} />
+                  {claude ? (
+                    <MarkdownRenderer content={"```bash\nnpx tsx .claude/skills/beacon/beacon.ts serve\n```"} />
+                  ) : (
+                    <MarkdownRenderer content={"```bash\nnpx tsx .agents/skills/beacon/beacon.ts serve\n```"} />
+                  )}
                   <span
                     className="text-xs mt-1 block"
                     style={{ color: "var(--c-muted)" }}
@@ -191,6 +232,39 @@ npx tsx .agents/skills/beacon/beacon.ts serve
                   <MarkdownRenderer content={"```bash\n/beacon start\n```"} />
                   Pick web or terminal mode. Your agent monitors the inbox,
                   generates lessons, and grades your answers.
+                </>
+              }
+            />
+            <Step
+              num={6}
+              title="Go to dashboard"
+              desc={
+                <>
+                  If you chose <strong>web mode</strong>, open the dashboard to
+                  browse courses, see suggestions, and chat with your agent.
+                  <div className="mt-3">
+                    <Link to="/dashboard">
+                      <Button
+                        size="sm"
+                        style={{
+                          background: "var(--c-accent)",
+                          color: "#221E17",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Go to dashboard
+                      </Button>
+                    </Link>
+                  </div>
+                  <p className="mt-3 text-xs" style={{ color: "var(--c-muted)" }}>
+                    Or, run the dashboard UI locally:
+                  </p>
+                  <MarkdownRenderer content={"```bash\ngit clone https://github.com/jeffsieu/beacon.git\ncd beacon/beacon-ui && npm install && npm run dev\n```"} />
+                  <p className="mt-2 text-xs" style={{ color: "var(--c-muted)" }}>
+                    Otherwise, continue in your terminal — your agent has
+                    everything it needs.
+                  </p>
                 </>
               }
             />
@@ -274,7 +348,7 @@ function Step({
         >
           {title}
         </h3>
-        <div className="text-sm leading-relaxed" style={{ color: "var(--c-muted)" }}>
+        <div className="text-sm leading-relaxed min-w-0" style={{ color: "var(--c-muted)" }}>
           {desc}
         </div>
       </div>
