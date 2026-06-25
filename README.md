@@ -1,6 +1,6 @@
 # Beacon
 
-An AI-guided learning companion. Beacon turns structured course curricula into interactive, AI-led lessons — your agent teaches, you answer, and your progress is tracked across every concept.
+An AI-guided learning companion. Beacon turns structured course curricula into interactive, AI-led lessons — your AI agent teaches, you answer, and your progress is tracked across every concept.
 
 ## How it works
 
@@ -16,19 +16,13 @@ You (browser)          Agent (Claude, etc.)        Filesystem
 
 1. **Courses** are markdown chapter files with checklist items — each item is a small, verifiable concept (~5 min).
 2. **The agent** monitors a shared inbox file, reads your answers, grades them against the curriculum, and updates your progress.
-3. **The viewer** is a browser app that shows lessons, knowledge checks, and a chat sidebar. It connects to a local relay server via SSE.
+3. **The viewer** shows lessons, knowledge checks, and a chat sidebar. It connects to a local relay server via SSE.
 
 Progress lives in `progress/<course>/KNOWLEDGE.md` — human-readable, git-trackable.
 
 ## Quickstart
 
-### 1. Create a learning folder
-
-```bash
-mkdir my-learning && cd my-learning
-```
-
-### 2. Install the skill
+### 1. Install the skill
 
 ```bash
 npx skills add username/beacon
@@ -36,23 +30,23 @@ npx skills add username/beacon
 
 This installs the agent skill, CLI, and relay server into `.agents/skills/beacon/`.
 
-### 3. Add a course
+### 2. Add a course
 
 ```bash
 beacon courses add username/my-course
 ```
 
-### 4. Start learning
+### 3. Start learning
 
 ```
 /beacon start web
 ```
 
-Your agent will start the relay server, launch the viewer at `http://localhost:5173`, and begin monitoring for your answers.
+Your agent will start the relay server and begin monitoring. Open the dashboard at **[beacon.jeffsieu.com](https://beacon.jeffsieu.com)** — it connects to your local relay server automatically.
 
-## Self-hosting the viewer
+## Running the viewer locally
 
-If you want to run the viewer locally instead of using the hosted version:
+To run the viewer yourself instead of using the hosted dashboard:
 
 ```bash
 git clone https://github.com/username/beacon.git
@@ -61,7 +55,7 @@ npm install
 npm run dev
 ```
 
-Then tell your agent: `/beacon start web` — the viewer connects to your local relay server automatically.
+Then run `/beacon start web` with `--cors-origin http://localhost:5173`. Open `http://localhost:5173`.
 
 ## Development
 
@@ -69,20 +63,25 @@ Then tell your agent: `/beacon start web` — the viewer connects to your local 
 
 ```
 beacon/
-├── .agents/skills/beacon/    ← Agent skill + CLI (installed via npx skills add)
-│   ├── SKILL.md              ← Shared reference + CLI + protocol
-│   ├── start.md              ← /beacon start learning flow
-│   ├── revise.md             ← /beacon revise spaced repetition
-│   ├── start-web.md          ← /beacon start web (browser + inbox)
-│   ├── start-terminal.md     ← /beacon start terminal
-│   ├── revise.md             ← /beacon revise spaced repetition
-│   ├── course.md             ← /beacon create-course interview
-│   ├── beacon.js             ← CLI entry point
+├── .agents/skills/beacon/    ← Agent skill + CLI
+│   ├── SKILL.md              ← Agent instructions (CLI ref, protocol, grading)
+│   ├── start.md              ← /beacon start dispatch
+│   ├── start-web.md          ← Browser-based learning flow
+│   ├── start-terminal.md     ← Terminal-based learning flow
+│   ├── revise.md             ← Spaced-repetition refresher
+│   ├── course.md             ← Course creation interview
+│   ├── beacon.ts             ← CLI entry point
 │   ├── beacon-cli/           ← Subcommands (serve, status, sync, slug, courses)
-│   ├── lib/                  ← Shared library (parsing, scoring, checksums)
 │   └── prompt-templates/     ← Subagent task templates
 ├── beacon-ui/                ← React viewer (Vite + shadcn/ui + Tailwind)
-│   └── package.json
+│   └── src/
+│       ├── App.tsx           ← Router
+│       ├── api.ts            ← API client + SSE
+│       ├── types.ts          ← Shared types
+│       ├── components/       ← Pages + UI components
+│       └── hooks/            ← useSession, useCourses, etc.
+├── AGENTS.md                 ← Agent instructions for developing Beacon
+├── UBIQUITOUS_LANGUAGE.md    ← Domain terminology (authoritative)
 └── README.md
 ```
 
@@ -90,7 +89,7 @@ beacon/
 
 ```bash
 # Terminal 1 — relay server
-cd .agents/skills/beacon && node beacon.js serve
+cd .agents/skills/beacon && npx tsx beacon.ts serve
 
 # Terminal 2 — viewer
 cd beacon-ui && npm run dev
@@ -102,7 +101,7 @@ Open `http://localhost:5173`. The viewer auto-connects to the relay server on `l
 
 | Command | Description |
 |---|---|
-| `beacon serve` | Start the relay server (HTTP + SSE) |
+| `beacon serve [--port N] [--cors-origin URL]` | Start the relay server (HTTP + SSE) |
 | `beacon status <course>` | Show curriculum checksum, progress, and scored items |
 | `beacon sync <course>` | Reconcile KNOWLEDGE.md against the current curriculum |
 | `beacon slug "<topic>"` | Generate a lesson slug |
