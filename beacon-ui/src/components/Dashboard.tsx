@@ -44,7 +44,7 @@ export default function Dashboard() {
     if (hasAutoRequested.current || isFetching) return
     hasAutoRequested.current = true
     if (!suggestionsData?.suggestions?.length) learnMutation.mutate('')
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [suggestionsData, isFetching, learnMutation])
 
   return (
     <div className="max-w-3xl mx-auto px-8 py-12">

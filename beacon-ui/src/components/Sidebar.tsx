@@ -14,9 +14,6 @@ import {
   CheckCircle2,
   Circle,
   XCircle,
-  Lightbulb,
-  AlertTriangle,
-  HelpCircle,
   History,
   Plus,
   Check,
@@ -26,8 +23,10 @@ import {
   PanelLeftClose,
 } from "lucide-react";
 import { useSession } from "../hooks/useSession.tsx";
-import { fetchSessions, type SessionSummary } from "../api";
+import { useSessionsQuery } from "../hooks/queries";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ChatMessage } from "../types";
+import { GRADE_VARIANTS, POINTER_VARIANTS, OBSERVATION_VARIANTS } from "../lib/status-variants";
 import MarkdownRenderer from "./MarkdownRenderer.tsx";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,15 +87,141 @@ function InputBar({
   );
 }
 
+interface PointerBubbleProps {
+  msg: Extract<ChatMessage, { type: "lesson:update-pointer" }>;
+  messageEls: React.MutableRefObject<Map<string, HTMLDivElement>>;
+}
+
+function PointerBubble({ msg, messageEls }: PointerBubbleProps) {
+  const v = POINTER_VARIANTS[msg.result] || POINTER_VARIANTS.NOT_LEARNED;
+  const Icon = v.icon;
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div
+      ref={(el) => {
+        if (el) messageEls.current.set(String(msg.id), el);
+      }}
+      className="self-start max-w-[90%]"
+      style={{
+        marginLeft: "1.25rem",
+        marginTop: "-4px",
+        position: "relative",
+        paddingLeft: "14px",
+      }}
+    >
+      <svg
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 14,
+          height: 28,
+          overflow: "visible",
+        }}
+      >
+        <path
+          d="M 0,0 Q 0,10 10,14"
+          fill="none"
+          stroke={v.color}
+          strokeWidth="2"
+          strokeOpacity="0.3"
+          strokeLinecap="round"
+        />
+      </svg>
+      <div
+        className={
+          expanded
+            ? "rounded-xl rounded-bl-sm px-3 py-2 cursor-pointer"
+            : "px-3 py-1 cursor-pointer hover:bg-[var(--c-surface-2)] rounded-lg transition-colors"
+        }
+        style={
+          expanded
+            ? {
+                border: `1px solid ${v.color}40`,
+                background: "var(--c-surface-2)",
+              }
+            : {}
+        }
+        onClick={() => setExpanded((prev) => !prev)}
+      >
+        {expanded ? (
+          <>
+            <div className="flex items-center gap-2">
+              <Icon
+                size={14}
+                style={{ color: v.color, flexShrink: 0 }}
+              />
+              <span
+                className="text-[0.78rem] font-semibold"
+                style={{
+                  color: v.color,
+                  fontFamily: "var(--font-family-ui)",
+                }}
+              >
+                {v.label}
+              </span>
+              <ChevronDown
+                size={12}
+                style={{
+                  color: "var(--c-muted)",
+                  flexShrink: 0,
+                  transform: "rotate(180deg)",
+                  transition: "transform 0.15s",
+                }}
+              />
+            </div>
+            <p
+              className="mt-1 text-[0.75rem] leading-snug"
+              style={{
+                fontFamily: "var(--font-family-ui)",
+                color: "var(--c-muted)",
+              }}
+            >
+              {msg.itemText}
+            </p>
+          </>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Icon
+              size={14}
+              style={{ color: v.color, flexShrink: 0 }}
+            />
+            <span
+              className="flex-1 min-w-0 text-[0.75rem] overflow-hidden"
+              style={{
+                fontFamily: "var(--font-family-ui)",
+                color: "var(--c-muted)",
+                display: "-webkit-box",
+                WebkitLineClamp: 1,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {msg.itemText}
+            </span>
+            <ChevronDown
+              size={12}
+              style={{
+                color: "var(--c-muted)",
+                flexShrink: 0,
+                transition: "transform 0.15s",
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   open: boolean;
   onToggle: () => void;
 }
 
 function quotedContent(msg: ChatMessage): string | null {
-  if (msg.type === "chat") return (msg as any).text;
+  if (msg.type === "chat") return (msg as Extract<ChatMessage, { type: "chat" }>).text ?? null;
   if (msg.type === "lesson:answer" || msg.type === "lesson:answer-mc")
-    return (msg as any).answer;
+    return (msg as Extract<ChatMessage, { type: "lesson:answer" | "lesson:answer-mc" }>).answer;
   return null;
 }
 
@@ -114,7 +239,8 @@ export default function Sidebar({ open, onToggle }: Props) {
   } = useSession();
   const [input, setInput] = useState("");
   const [view, setView] = useState<"chat" | "sessions">("chat");
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const { data: sessions = [] } = useSessionsQuery();
+  const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -171,21 +297,12 @@ export default function Sidebar({ open, onToggle }: Props) {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  // Fetch sessions on mount for the title
-  useEffect(() => {
-    fetchSessions()
-      .then((data) => setSessions(data.sessions))
-      .catch(() => {});
-  }, []);
-
   // Re-fetch when switching to sessions view
   useEffect(() => {
     if (view === "sessions") {
-      fetchSessions()
-        .then((data) => setSessions(data.sessions))
-        .catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
     }
-  }, [view]);
+  }, [view, queryClient]);
 
   async function handleSend() {
     const text = input.trim();
@@ -330,17 +447,18 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // lesson:answer-mc messages are metadata — skip rendering
                 if (
                   msg.role === "user" &&
-                  (msg as any).type === "lesson:answer-mc"
+                  msg.type === "lesson:answer-mc"
                 )
                   return null;
 
                 // message:ack is metadata — skip rendering
-                if ((msg as any).type === "message:ack") return null;
+                if ((msg.type as string) === "message:ack") return null;
 
                 // lesson:committed bubble (assistant — progress summary)
-                if ((msg as any).type === "lesson:committed") {
+                if (msg.type === "lesson:committed") {
+                  const committedMsg = msg as Extract<ChatMessage, { type: "lesson:committed" }>;
                   const summary: Array<{ item: string; status: string }> =
-                    (msg as any).summary || [];
+                    committedMsg.summary || [];
                   return (
                     <div key={msg.id} className="self-start max-w-[90%]">
                       <div
@@ -405,9 +523,9 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // lesson:answer:clarify bubble (assistant side — clarification request)
                 if (
                   msg.role === "assistant" &&
-                  (msg as any).type === "lesson:answer:clarify"
+                  msg.type === "lesson:answer:clarify"
                 ) {
-                  const m = msg as any;
+                  const m = msg as Extract<ChatMessage, { type: "lesson:answer:clarify" }>;
                   return (
                     <div
                       key={m.id}
@@ -436,32 +554,13 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // lesson:answer:success bubble (assistant side — grade + quoted answer)
                 if (
                   msg.role === "assistant" &&
-                  (msg as any).type === "lesson:answer:success"
+                  msg.type === "lesson:answer:success"
                 ) {
-                  const m = msg as any;
-                  const gradeVariants: Record<
-                    string,
-                    { icon: typeof CheckCircle2; color: string; label: string }
-                  > = {
-                    CORRECT: {
-                      icon: CheckCircle2,
-                      color: "#22c55e",
-                      label: "Correct",
-                    },
-                    PARTIALLY_CORRECT: {
-                      icon: Circle,
-                      color: "#f59e0b",
-                      label: "Partially correct",
-                    },
-                    INCORRECT: {
-                      icon: XCircle,
-                      color: "#ef4444",
-                      label: "Incorrect",
-                    },
-                  };
+                  const m = msg as Extract<ChatMessage, { type: "lesson:answer:success" }>;
+                  const gradeVariants = GRADE_VARIANTS;
                   const v = gradeVariants[m.result] || gradeVariants.INCORRECT;
                   const Icon = v.icon;
-                  const replied = messageById.get(m.replyTo || msg.id);
+                  const replied = messageById.get(m.replyTo || String(msg.id));
                   const quote = replied
                     ? quotedContent(replied)
                     : m.answer?.length > 120
@@ -487,7 +586,7 @@ export default function Sidebar({ open, onToggle }: Props) {
                               WebkitLineClamp: 2,
                               WebkitBoxOrient: "vertical",
                             }}
-                            onClick={() => scrollToMessage(m.replyTo || msg.id)}
+                            onClick={() => scrollToMessage(m.replyTo || String(msg.id))}
                             title="Scroll to your answer"
                           >
                             {quote}
@@ -516,10 +615,10 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // agent:error bubble
                 if (
                   msg.role === "assistant" &&
-                  (msg as any).type === "agent:error"
+                  msg.type === "agent:error"
                 ) {
-                  const m = msg as any;
-                  const replied = messageById.get(m.replyTo);
+                  const m = msg as Extract<ChatMessage, { type: "agent:error" }>;
+                  const replied = messageById.get(m.replyTo || String(m.id));
                   const quote = replied ? quotedContent(replied) : null;
                   return (
                     <div key={msg.id} className="self-start max-w-[90%]">
@@ -551,7 +650,7 @@ export default function Sidebar({ open, onToggle }: Props) {
                               WebkitLineClamp: 2,
                               WebkitBoxOrient: "vertical",
                             }}
-                            onClick={() => scrollToMessage(m.replyTo)}
+                            onClick={() => scrollToMessage(m.replyTo || "")}
                             title="Scroll to message"
                           >
                             {quote}
@@ -571,32 +670,14 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // observation bubble (bonus, misunderstanding, unknown)
                 if (
                   msg.role === "assistant" &&
-                  (msg as any).type === "lesson:observation"
+                  msg.type === "lesson:observation"
                 ) {
-                  const obsConfig: Record<
-                    string,
-                    { icon: typeof Lightbulb; color: string; label: string }
-                  > = {
-                    bonus: {
-                      icon: Lightbulb,
-                      color: "#a855f7",
-                      label: "Bonus",
-                    },
-                    misunderstanding: {
-                      icon: AlertTriangle,
-                      color: "#f59e0b",
-                      label:
-                        (msg as any).status === "CLEARED"
-                          ? "Cleared"
-                          : "Misunderstanding",
-                    },
-                    unknown: {
-                      icon: HelpCircle,
-                      color: "#6b7280",
-                      label: "Unknown",
-                    },
-                  };
-                  const c = obsConfig[(msg as any).category] || obsConfig.bonus;
+                  const obsConfig = OBSERVATION_VARIANTS;
+                  const category = "category" in msg ? (msg as Extract<ChatMessage, { type: "lesson:observation" }>).category : "bonus";
+                  const isMisuCleared = category === "misunderstanding" && "status" in msg && msg.status === "CLEARED";
+                  const c = isMisuCleared
+                    ? { ...obsConfig.misunderstanding, label: "Cleared" }
+                    : obsConfig[category] || obsConfig.bonus;
                   const Icon = c.icon;
                   return (
                     <div
@@ -625,7 +706,7 @@ export default function Sidebar({ open, onToggle }: Props) {
                           className="text-[0.78rem]"
                           style={{ color: "var(--c-muted)" }}
                         >
-                          {(msg as any).text}
+                          {(msg as Extract<ChatMessage, { type: "lesson:observation" }>).text}
                         </p>
                       </div>
                     </div>
@@ -635,164 +716,18 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // lesson:update-pointer bubble (assistant — collapsible)
                 if (
                   msg.role === "assistant" &&
-                  (msg as any).type === "lesson:update-pointer"
+                  msg.type === "lesson:update-pointer"
                 ) {
-                  const PointerInline = () => {
-                    const pointerVariants: Record<
-                      string,
-                      {
-                        icon: typeof CheckCircle2;
-                        color: string;
-                        label: string;
-                      }
-                    > = {
-                      LEARNED: {
-                        icon: CheckCircle2,
-                        color: "#22c55e",
-                        label: "Learned",
-                      },
-                      LEARNED_PARTIAL: {
-                        icon: Circle,
-                        color: "#f59e0b",
-                        label: "Partially learned",
-                      },
-                      NOT_LEARNED: {
-                        icon: XCircle,
-                        color: "#ef4444",
-                        label: "Not learned",
-                      },
-                    };
-                    const v =
-                      pointerVariants[(msg as any).result] ||
-                      pointerVariants.NOT_LEARNED;
-                    const Icon = v.icon;
-                    const [expanded, setExpanded] = useState(false);
-                    return (
-                      <div
-                        ref={(el) => {
-                          if (el) messageEls.current.set(String(msg.id), el);
-                        }}
-                        className="self-start max-w-[90%]"
-                        style={{
-                          marginLeft: "1.25rem",
-                          marginTop: "-4px",
-                          position: "relative",
-                          paddingLeft: "14px",
-                        }}
-                      >
-                        <svg
-                          style={{
-                            position: "absolute",
-                            left: 0,
-                            top: 0,
-                            width: 14,
-                            height: 28,
-                            overflow: "visible",
-                          }}
-                        >
-                          <path
-                            d="M 0,0 Q 0,10 10,14"
-                            fill="none"
-                            stroke={v.color}
-                            strokeWidth="2"
-                            strokeOpacity="0.3"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                        <div
-                          className={
-                            expanded
-                              ? "rounded-xl rounded-bl-sm px-3 py-2 cursor-pointer"
-                              : "px-3 py-1 cursor-pointer hover:bg-[var(--c-surface-2)] rounded-lg transition-colors"
-                          }
-                          style={
-                            expanded
-                              ? {
-                                  border: `1px solid ${v.color}40`,
-                                  background: "var(--c-surface-2)",
-                                }
-                              : {}
-                          }
-                          onClick={() => setExpanded((prev) => !prev)}
-                        >
-                          {expanded ? (
-                            <>
-                              <div className="flex items-center gap-2">
-                                <Icon
-                                  size={14}
-                                  style={{ color: v.color, flexShrink: 0 }}
-                                />
-                                <span
-                                  className="text-[0.78rem] font-semibold"
-                                  style={{
-                                    color: v.color,
-                                    fontFamily: "var(--font-family-ui)",
-                                  }}
-                                >
-                                  {v.label}
-                                </span>
-                                <ChevronDown
-                                  size={12}
-                                  style={{
-                                    color: "var(--c-muted)",
-                                    flexShrink: 0,
-                                    transform: "rotate(180deg)",
-                                    transition: "transform 0.15s",
-                                  }}
-                                />
-                              </div>
-                              <p
-                                className="mt-1 text-[0.75rem] leading-snug"
-                                style={{
-                                  fontFamily: "var(--font-family-ui)",
-                                  color: "var(--c-muted)",
-                                }}
-                              >
-                                {(msg as any).itemText}
-                              </p>
-                            </>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <Icon
-                                size={14}
-                                style={{ color: v.color, flexShrink: 0 }}
-                              />
-                              <span
-                                className="flex-1 min-w-0 text-[0.75rem] overflow-hidden"
-                                style={{
-                                  fontFamily: "var(--font-family-ui)",
-                                  color: "var(--c-muted)",
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 1,
-                                  WebkitBoxOrient: "vertical",
-                                }}
-                              >
-                                {(msg as any).itemText}
-                              </span>
-                              <ChevronDown
-                                size={12}
-                                style={{
-                                  color: "var(--c-muted)",
-                                  flexShrink: 0,
-                                  transition: "transform 0.15s",
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  };
-                  return <PointerInline />;
+                  return <PointerBubble msg={msg as Extract<ChatMessage, { type: "lesson:update-pointer" }>} messageEls={messageEls} />;
                 }
 
                 // lesson:suggestion:success bubble (assistant)
                 if (
                   msg.role === "assistant" &&
-                  (msg as any).type === "lesson:suggestion:success"
+                  msg.type === "lesson:suggestion:success"
                 ) {
-                  const suggestions = (msg as any).suggestions || [];
-                  const rationale = (msg as any).rationale || "";
+                  const suggestions = (msg as Extract<ChatMessage, { type: "lesson:suggestion:success" }>).suggestions || [];
+                  const rationale = (msg as Extract<ChatMessage, { type: "lesson:suggestion:success" }>).rationale || "";
                   return (
                     <div key={msg.id} className="self-start max-w-[92%] w-full">
                       <div
@@ -862,9 +797,9 @@ export default function Sidebar({ open, onToggle }: Props) {
 
                 if (
                   msg.role === "assistant" &&
-                  (msg as any).type === "lesson:generate:success"
+                  msg.type === "lesson:generate:success"
                 ) {
-                  const title = (msg as any).title || "lesson";
+                  const title = (msg as Extract<ChatMessage, { type: "lesson:generate:success" }>).title || "lesson";
                   return (
                     <div key={msg.id} className="self-start max-w-[90%]">
                       <div
@@ -896,9 +831,9 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // lesson:generate bubble (user action)
                 if (
                   msg.role === "user" &&
-                  (msg as any).type === "lesson:generate"
+                  msg.type === "lesson:generate"
                 ) {
-                  const title = (msg as any).title || "lesson";
+                  const title = (msg as Extract<ChatMessage, { type: "lesson:generate" }>).title || "lesson";
                   return (
                     <div
                       key={msg.id}
@@ -948,8 +883,9 @@ export default function Sidebar({ open, onToggle }: Props) {
                 // lesson:answer bubble (user side — shows the submitted answer)
                 if (
                   msg.role === "user" &&
-                  (msg as any).type === "lesson:answer"
+                  msg.type === "lesson:answer"
                 ) {
+                  const m = msg as Extract<ChatMessage, { type: "lesson:answer" }>;
                   return (
                     <div
                       key={msg.id}
@@ -992,7 +928,7 @@ export default function Sidebar({ open, onToggle }: Props) {
                           }}
                           onClick={() => {
                             const el = document.getElementById(
-                              (msg as any).questionId,
+                              m.questionId,
                             );
                             if (!el) return;
                             el.scrollIntoView({
@@ -1015,9 +951,9 @@ export default function Sidebar({ open, onToggle }: Props) {
                             onScroll();
                           }}
                         >
-                          {(msg as any).questionTitle}
+                          {m.questionTitle}
                         </div>
-                        <MarkdownRenderer content={(msg as any).answer} />
+                        <MarkdownRenderer content={m.answer} />
                       </div>
                     </div>
                   );
@@ -1025,9 +961,10 @@ export default function Sidebar({ open, onToggle }: Props) {
 
                 // regular chat (user / assistant)
                 const isAssistant =
-                  msg.role === "assistant" && (msg as any).type === "chat";
+                  msg.role === "assistant" && msg.type === "chat";
                 const isUser =
-                  msg.role === "user" && (msg as any).type === "chat";
+                  msg.role === "user" && msg.type === "chat";
+                const chatMsg = msg as Extract<ChatMessage, { type: "chat" }>;
                 return (
                   <div
                     key={msg.id}
@@ -1052,7 +989,7 @@ export default function Sidebar({ open, onToggle }: Props) {
                           isUser
                             ? "rounded-xl rounded-br-sm whitespace-pre-wrap"
                             : "rounded-xl rounded-bl-sm",
-                          (msg as any).pending ? "italic" : "",
+                          chatMsg.pending ? "italic" : "",
                         ].join(" ")}
                         style={{
                           fontFamily: "var(--font-family-ui)",
@@ -1061,24 +998,24 @@ export default function Sidebar({ open, onToggle }: Props) {
                             : "var(--c-surface-2)",
                           color: isUser
                             ? "#221E17"
-                            : (msg as any).pending
+                            : chatMsg.pending
                               ? "var(--c-muted)"
                               : "var(--c-text)",
                         }}
                       >
-                        {isAssistant && (msg as any).pending ? (
+                        {isAssistant && chatMsg.pending ? (
                           <span className="flex items-center gap-1 px-1 py-1">
                             <span className="typing-dot" />
                             <span className="typing-dot" />
                             <span className="typing-dot" />
                           </span>
-                        ) : isAssistant && !(msg as any).pending ? (
+                        ) : isAssistant && !chatMsg.pending ? (
                           <MarkdownRenderer
-                            content={((msg as any).text ?? "").replace(/\\n/g, "\n")}
+                            content={(chatMsg.text ?? "").replace(/\\n/g, "\n")}
                             className="sidebar-markdown"
                           />
                         ) : (
-                          ((msg as any).text ?? "").replace(/\\n/g, "\n")
+                          (chatMsg.text ?? "").replace(/\\n/g, "\n")
                         )}
                       </div>
                       {msg.role === "user" &&

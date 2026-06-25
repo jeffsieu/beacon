@@ -1,13 +1,7 @@
 import { Link } from 'react-router'
 import type { CourseSummary } from '../types'
 import { encodeCourseId } from '../api'
-
-function courseColor(course: string): string {
-  const colors = ['#E0900C', '#138C8A', '#3A9D5D', '#9B59B6', '#2980B9', '#E67E22', '#16A085', '#8E44AD', '#2C3E50', '#C0392B']
-  let h = 0
-  for (let i = 0; i < course.length; i++) h = (h * 31 + course.charCodeAt(i)) >>> 0
-  return colors[h % colors.length]
-}
+import { courseColor } from '../lib/course-color'
 
 interface Props {
   summary: CourseSummary

@@ -1,5 +1,5 @@
 import { useParams, useLocation, Link } from 'react-router'
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import type { PlacementProposed } from '../types'
 import ProgressRing from './ProgressRing'
 import { useCourseProgress } from '../hooks/useCourseProgress'
@@ -8,18 +8,12 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { encodeCourseId, decodeCourseId } from '../api'
+import { encodeCourseId, decodeCourseId, API } from '../api'
+import { courseColor } from '../lib/course-color'
 
 interface LocationState {
   proposed: PlacementProposed
   sessionId: string
-}
-
-function courseColor(course: string): string {
-  const colors = ['#E0900C', '#138C8A', '#3A9D5D', '#9B59B6', '#2980B9', '#E67E22', '#16A085', '#8E44AD', '#2C3E50', '#C0392B']
-  let h = 0
-  for (let i = 0; i < course.length; i++) h = (h * 31 + course.charCodeAt(i)) >>> 0
-  return colors[h % colors.length]
 }
 
 export default function PlacementResults() {
@@ -29,14 +23,13 @@ export default function PlacementResults() {
   const state = location.state as LocationState | null
   const { progress } = useCourseProgress(course!)
   const { data: courses } = useCoursesQuery()
-  const [courseTitle, setCourseTitle] = useState(course || '')
 
-  // Derive course title from query data
-  useEffect(() => {
+  const courseTitle = useMemo(() => {
     if (course && courses) {
       const found = courses.find(c => c.course === course)
-      if (found?.title) setCourseTitle(found.title)
+      if (found?.title) return found.title
     }
+    return course || ''
   }, [course, courses])
 
   const [accepting, setAccepting] = useState(false)
@@ -64,7 +57,7 @@ export default function PlacementResults() {
 
   function handleAccept() {
     setAccepting(true)
-    fetch(`/api/sessions/${sessionId}/message`, {
+    fetch(`${API}/sessions/${sessionId}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'placement:accept' }),

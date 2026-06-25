@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MarkdownRenderer from "./MarkdownRenderer";
+import Eyebrow from "./Eyebrow";
 
 interface Props {
   courseId?: string;
@@ -24,17 +25,6 @@ interface Props {
   loading: boolean;
   recentLesson?: LessonMeta | null;
   onSend: (content: string) => void;
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="block text-[0.68rem] font-semibold tracking-[0.15em] uppercase mb-3"
-      style={{ color: "var(--c-muted)", fontFamily: "var(--font-family-ui)" }}
-    >
-      {children}
-    </span>
-  );
 }
 
 function WhatYoullLearn({

@@ -1,9 +1,10 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
+import { useEventListener } from 'usehooks-ts'
 import { useSession } from '../hooks/useSession.tsx'
-import { useLessonQuery } from '../hooks/queries'
+import { useLessonQuery, useLessonProgressQuery } from '../hooks/queries'
 import { useQueryClient } from '@tanstack/react-query'
-import { pushSessionState, fetchLessonProgress, encodeCourseId, decodeCourseId } from '../api'
+import { pushSessionState, encodeCourseId, decodeCourseId } from '../api'
 import KnowledgeCheck from './KnowledgeCheck.tsx'
 import MarkdownRenderer from './MarkdownRenderer.tsx'
 import type { KnowledgeQuestion } from '../types'
@@ -24,17 +25,12 @@ export default function LessonPage() {
   const queryClient = useQueryClient()
   const { setLessonTitle, session, setSelectedText, replies, mcAnswers, sendMessage, subscribe } = useSession()
   const { data: lesson, isLoading, error } = useLessonQuery(course!, slug!)
-  const [savedProgress, setSavedProgress] = useState<{ questions: Record<string, any>; status: string } | null>(null)
-  const sectionsReadRef = useRef<Set<string>>(new Set())
-  const bodyRef = useRef<HTMLDivElement>(null)
   const [showFinishModal, setShowFinishModal] = useState(false)
   const [finishing, setFinishing] = useState(false)
 
-  // Load previously saved progress (survives session switches)
-  useEffect(() => {
-    if (!course || !slug) return
-    fetchLessonProgress(course, slug).then(setSavedProgress).catch(() => {})
-  }, [course, slug])
+  const { data: savedProgress = null } = useLessonProgressQuery(course!, slug!);
+  const sectionsReadRef = useRef<Set<string>>(new Set())
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   const questions: KnowledgeQuestion[] = lesson?.knowledgeCheck ?? []
 
@@ -107,15 +103,10 @@ export default function LessonPage() {
     return () => observer.disconnect()
   }, [lesson, pushState])
 
-  useEffect(() => {
-    const onMouseUp = (e: MouseEvent) => {
-      // Don't touch selectedText when clicking inside the sidebar — it clears the DOM selection
-      if ((e.target as HTMLElement).closest('[data-sidebar]')) return
-      setSelectedText(window.getSelection()?.toString().trim() ?? '')
-    }
-    document.addEventListener('mouseup', onMouseUp)
-    return () => document.removeEventListener('mouseup', onMouseUp)
-  }, [setSelectedText])
+  useEventListener('mouseup', (e: MouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-sidebar]')) return
+    setSelectedText(window.getSelection()?.toString().trim() ?? '')
+  })
 
   if (error) return (
     <div className="max-w-[680px] mx-auto px-6 py-10">

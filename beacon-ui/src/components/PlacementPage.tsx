@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import type { PlacementQuestion as PQ, PlacementProposed } from '../types'
 import PlacementQuestion from './PlacementQuestion'
@@ -23,19 +23,19 @@ export default function PlacementPage() {
   const { data: courses } = useCoursesQuery()
 
   const [phase, setPhase] = useState<Phase>('waiting')
-  const [courseTitle, setCourseTitle] = useState(course || '')
   const [questions, setQuestions] = useState<PQ[]>([])
   const [answers, setAnswers] = useState<PendingAnswer[]>([])
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
 
-  // Derive course title from query data
-  useEffect(() => {
+  const courseTitle = useMemo(() => {
     if (course && courses) {
       const found = courses.find(c => c.course === course)
-      if (found?.title) setCourseTitle(found.title)
+      if (found?.title) return found.title
     }
+    return course || ''
   }, [course, courses])
+
   useEffect(() => {
     if (!session?.sessionId || !course) {
       if (!session) setPhase('no-session')
@@ -43,7 +43,7 @@ export default function PlacementPage() {
     }
     sendMessage({ type: 'placement:request', courseId: course })
       .catch((e: unknown) => { setError(String(e)); setPhase('error') })
-  }, [session?.sessionId, course]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session?.sessionId, course, sendMessage])
 
   // Subscribe to placement events via session SSE
   useEffect(() => {

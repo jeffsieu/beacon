@@ -8,6 +8,7 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import ProgressRing from "./ProgressRing";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { sendSessionMessage, encodeCourseId, decodeCourseId } from "../api";
+import { courseColor } from "../lib/course-color";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
@@ -27,36 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import ContinueLearning from "./ContinueLearning";
 import LessonList from "./LessonList";
-
-function courseColor(course: string): string {
-  const colors = [
-    "#E0900C",
-    "#138C8A",
-    "#3A9D5D",
-    "#9B59B6",
-    "#2980B9",
-    "#E67E22",
-    "#16A085",
-    "#8E44AD",
-    "#2C3E50",
-    "#C0392B",
-  ];
-  let h = 0;
-  for (let i = 0; i < course.length; i++)
-    h = (h * 31 + course.charCodeAt(i)) >>> 0;
-  return colors[h % colors.length];
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="block text-[0.68rem] font-semibold tracking-[0.15em] uppercase mb-3"
-      style={{ color: "var(--c-muted)", fontFamily: "var(--font-family-ui)" }}
-    >
-      {children}
-    </span>
-  );
-}
+import Eyebrow from "./Eyebrow";
 
 export default function CourseOverview() {
   const { course: encodedCourse } = useParams<{ course: string }>();
@@ -125,12 +97,8 @@ const course = decodeCourseId(encodedCourse!);
     chapters: [],
   };
 
-  // Auto-select first chapter for the outline modal
-  useEffect(() => {
-    if (chapters.length > 0 && !selectedChapter) {
-      setSelectedChapter(chapters[0].chapter);
-    }
-  }, [chapters, selectedChapter]);
+  // Derive active chapter: manual selection wins, otherwise first chapter
+  const activeChapter = selectedChapter ?? chapters[0]?.chapter ?? null;
 
   if (error)
     return (
@@ -363,7 +331,7 @@ const course = decodeCourseId(encodedCourse!);
                   (i) => i.status === "LEARNED",
                 ).length;
                 const chTotal = ch.items.length;
-                const isActive = selectedChapter === ch.chapter;
+                const isActive = activeChapter === ch.chapter;
                 return (
                   <button
                     key={ch.chapter}
@@ -406,7 +374,7 @@ const course = decodeCourseId(encodedCourse!);
               {(() => {
                 const active = chapters.find(
                   (c: import("../types").ChapterProgress) =>
-                    c.chapter === selectedChapter,
+                    c.chapter === activeChapter,
                 );
                 if (!active) {
                   return (

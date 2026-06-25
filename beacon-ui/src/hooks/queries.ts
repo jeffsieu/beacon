@@ -1,12 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
-import * as api from '../api'
+import { API } from '../api'
+import type { SessionSummary } from '../types'
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`server error ${res.status}`)
+  return res.json() as Promise<T>
+}
 
 // ── Courses ──
 
 export function useCoursesQuery() {
   return useQuery({
     queryKey: ['courses'],
-    queryFn: api.fetchCourses,
+    queryFn: () => fetchJson<import('../types').CourseSummary[]>(`${API}/courses`),
     staleTime: 30_000,
   })
 }
@@ -16,7 +23,7 @@ export function useCoursesQuery() {
 export function useCourseProgressQuery(course: string) {
   return useQuery({
     queryKey: ['courseProgress', course],
-    queryFn: () => api.fetchCourseProgress(course),
+    queryFn: () => fetchJson<import('../types').CourseProgress>(`${API}/courses/${course.replace(/\//g, '~')}/progress`),
     enabled: !!course,
     staleTime: 10_000,
   })
@@ -27,7 +34,7 @@ export function useCourseProgressQuery(course: string) {
 export function useLessonsQuery() {
   return useQuery({
     queryKey: ['lessons'],
-    queryFn: api.fetchLessons,
+    queryFn: () => fetchJson<import('../types').LessonMeta[]>(`${API}/lessons`),
     staleTime: 30_000,
   })
 }
@@ -37,9 +44,20 @@ export function useLessonsQuery() {
 export function useLessonQuery(course: string, slug: string) {
   return useQuery({
     queryKey: ['lesson', course, slug],
-    queryFn: () => api.fetchLesson(course, slug),
+    queryFn: () => fetchJson<import('../types').Lesson>(`${API}/lessons/${course.replace(/\//g, '~')}/${encodeURIComponent(slug)}`),
     enabled: !!course && !!slug,
     staleTime: 60_000,
+  })
+}
+
+// ── Lesson progress ──
+
+export function useLessonProgressQuery(course: string, slug: string) {
+  return useQuery({
+    queryKey: ['lessonProgress', course, slug],
+    queryFn: () => fetchJson<{ questions: Record<string, any>; status: string }>(`${API}/lessons/${course.replace(/\//g, '~')}/${encodeURIComponent(slug)}/progress`),
+    enabled: !!course && !!slug,
+    staleTime: 10_000,
   })
 }
 
@@ -48,7 +66,7 @@ export function useLessonQuery(course: string, slug: string) {
 export function useCourseSuggestionsQuery(course: string) {
   return useQuery({
     queryKey: ['courseSuggestions', course],
-    queryFn: () => api.fetchCourseSuggestions(course),
+    queryFn: () => fetchJson<{ suggestions: import('../types').LearnSuggestionItem[]; chips: import('../types').LearnSuggestionItem[]; rationale: string }>(`${API}/courses/${course.replace(/\//g, '~')}/suggestions`),
     enabled: !!course,
     staleTime: Infinity,
   })
@@ -59,7 +77,7 @@ export function useCourseSuggestionsQuery(course: string) {
 export function useDashboardSuggestionsQuery() {
   return useQuery({
     queryKey: ['dashboardSuggestions'],
-    queryFn: () => api.fetchDashboardSuggestions(),
+    queryFn: () => fetchJson<{ suggestions: import('../types').LearnSuggestionItem[]; chips: import('../types').LearnSuggestionItem[]; rationale: string }>(`${API}/dashboard/suggestions`),
     staleTime: Infinity,
   })
 }
@@ -69,9 +87,19 @@ export function useDashboardSuggestionsQuery() {
 export function useServerStatusQuery() {
   return useQuery({
     queryKey: ['health'],
-    queryFn: api.fetchHealth,
+    queryFn: () => fetchJson<{ ok: boolean }>(`${API}/health`),
     refetchInterval: 5_000,
     staleTime: 4_000,
     retry: 1,
+  })
+}
+
+// ── Sessions ──
+
+export function useSessionsQuery() {
+  return useQuery({
+    queryKey: ['sessions'],
+    queryFn: () => fetchJson<{ sessions: SessionSummary[] }>(`${API}/sessions`).then(d => d.sessions),
+    staleTime: 10_000,
   })
 }

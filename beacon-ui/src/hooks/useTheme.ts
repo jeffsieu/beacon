@@ -1,20 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useLocalStorage } from 'usehooks-ts'
 
 type Theme = 'light' | 'dark'
 
 const STORAGE_KEY = 'beacon-theme'
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null
-    if (stored === 'light' || stored === 'dark') return stored
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  })
+  const [theme, setTheme] = useLocalStorage<Theme>(STORAGE_KEY, 
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    { initializeWithValue: true }
+  )
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem(STORAGE_KEY, theme)
-  }, [theme])
+  // Setting a DOM attribute during render is safe — React itself does this for hydration.
+  // It doesn't depend on DOM state and is idempotent.
+  document.documentElement.setAttribute('data-theme', theme)
 
   const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
 

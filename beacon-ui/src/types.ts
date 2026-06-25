@@ -201,3 +201,12 @@ export interface LearnSuggestion {
   suggestions: LearnSuggestionItem[];
   rationale?: string;
 }
+
+export interface SessionSummary {
+  id: string
+  course: string | null
+  title: string | null
+  createdAt: string | null
+  messageCount: number
+  lastMessage: { role: string; content?: string; timestamp?: string } | null
+}
