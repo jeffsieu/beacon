@@ -7,6 +7,7 @@ import { slugCommand } from "./beacon-cli/slug.js";
 import { statusCommands } from "./beacon-cli/status.js";
 import { inboxCommands } from "./beacon-cli/inbox.js";
 import { serverCommands } from "./beacon-cli/server.js";
+import { updateCommand } from "./beacon-cli/update.js";
 
 await runProgram({
   commands: [
@@ -15,6 +16,7 @@ await runProgram({
     ...statusCommands,
     ...inboxCommands,
     ...serverCommands,
+    updateCommand,
   ],
   metadata: {
     name: "beacon",
